@@ -1,0 +1,4 @@
+# Production must use `wrangler secret put` for these values.
+ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+ACCESS_AUD=replace-with-access-application-audience
+ADMIN_EMAIL=you@example.com

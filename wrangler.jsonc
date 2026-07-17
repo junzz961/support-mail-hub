@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "support-mail-hub",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "RETENTION_DAYS": "90",
+    "MAX_BODY_BYTES": "102400"
+  },
+  "d1_databases": [
+    {
+      "binding": "MAIL_DB",
+      "database_name": "support-mail-hub",
+      "database_id": "92af9fad-a663-4dd4-9736-f9750a98914e",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "triggers": {
+    "crons": ["15 2 * * *"]
+  }
+}
