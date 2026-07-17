@@ -5,7 +5,6 @@ import {
   escapeHtml,
   normalizeEmail,
   normalizeMessageId,
-  normalizeReplySubject,
   safeJsonArray,
 } from "./core.ts";
 import { MailStore } from "./store.ts";
@@ -40,7 +39,9 @@ export async function sendThreadReply(input: {
   store: MailStore;
   threadId: string;
   clientRequestId: string;
+  subject: string;
   text: string;
+  images: Array<{ filename: string; type: string; content: string; size: number }>;
 }): Promise<ReplyResult> {
   const existing = await input.store.getMessageByClientRequestId(input.clientRequestId);
   if (existing) return duplicateResult(input.store, existing);
@@ -55,9 +56,9 @@ export async function sendThreadReply(input: {
     ?? normalizeEmail(context.latestInbound.fromAddress);
   if (!recipient) throw new ReplyError("INVALID_RECIPIENT", 409, "来信没有有效的回复地址");
   const text = cleanBody(input.text);
-  if (!text) throw new ReplyError("EMPTY_REPLY", 400, "请输入回复内容");
+  if (!text && !input.images.length) throw new ReplyError("EMPTY_REPLY", 400, "请输入回复内容或添加图片");
 
-  const subject = normalizeReplySubject(context.latestInbound.subject || context.thread.subject);
+  const subject = input.subject;
   const previousReferences = safeJsonArray<string>(context.latestInbound.referencesJson);
   const threadHeaders = buildReplyHeaders(context.latestInbound.rfcMessageId, previousReferences);
   const pending = await input.store.createPendingReply({
@@ -66,6 +67,8 @@ export async function sendThreadReply(input: {
     recipient,
     subject,
     text,
+    attachments: input.images.map((image) => ({ name: image.filename, type: image.type })),
+    rawSize: input.images.reduce((total, image) => total + image.size, 0),
     references: Object.values(threadHeaders),
     now: Date.now(),
   });
@@ -78,8 +81,16 @@ export async function sendThreadReply(input: {
       from: { email: context.mailbox.address, name: context.mailbox.senderName },
       replyTo: context.mailbox.address,
       subject,
-      text,
-      html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65;color:#17201d;white-space:normal">${escapeHtml(text).replaceAll("\n", "<br>")}</div>`,
+      ...(text ? {
+        text,
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65;color:#17201d;white-space:normal">${escapeHtml(text).replaceAll("\n", "<br>")}</div>`,
+      } : {}),
+      attachments: input.images.map((image) => ({
+        content: image.content,
+        filename: image.filename,
+        type: image.type,
+        disposition: "attachment" as const,
+      })),
       headers: {
         ...threadHeaders,
         "X-Support-Thread-ID": context.thread.id,

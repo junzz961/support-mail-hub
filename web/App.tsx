@@ -6,7 +6,7 @@ import type {
   ThreadDetail,
   ThreadSummary,
 } from "../shared/types.ts";
-import { ApiError, hubApi, type MailboxInput } from "./api.ts";
+import { ApiError, hubApi, type MailboxInput, type ReplyImageInput } from "./api.ts";
 
 type Screen = "mail" | "settings";
 type LoadState = "loading" | "ready" | "error";
@@ -41,6 +41,24 @@ function formatTime(value: string, compact = false): string {
 
 function senderLabel(thread: ThreadSummary): string {
   return thread.participantName || thread.participantEmail;
+}
+
+function replySubject(subject: string): string {
+  return /^\s*re\s*:/i.test(subject) ? subject : `Re: ${subject}`;
+}
+
+function fileToReplyImage(file: File): Promise<ReplyImageInput> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      const content = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      if (!content) reject(new Error("图片读取失败"));
+      else resolve({ filename: file.name || `clipboard-${Date.now()}.png`, type: file.type, content });
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function StateView({ state, onRetry }: { state: LoadState; onRetry: () => void }) {
@@ -218,7 +236,7 @@ export function App() {
 
           <main className="conversation-panel">
             {threadLoading ? <div className="conversation-placeholder"><span className="spinner" />载入会话…</div>
-              : selected ? <Conversation thread={selected} onBack={() => { setSelectedId(undefined); setSelected(undefined); }} onSent={reloadSelected} />
+              : selected ? <Conversation key={selected.id} thread={selected} onBack={() => { setSelectedId(undefined); setSelected(undefined); }} onSent={reloadSelected} />
               : <div className="conversation-placeholder"><span className="placeholder-mark">↗</span><h2>选择一段会话</h2><p>查看最近 90 天的文本记录，并从正确的支持地址回复。</p></div>}
           </main>
         </div>
@@ -233,26 +251,56 @@ function DeliveryBadge({ message }: { message: MailMessage }) {
 }
 
 function Conversation({ thread, onBack, onSent }: { thread: ThreadDetail; onBack: () => void; onSent: () => Promise<void> }) {
+  const [subject, setSubject] = useState(() => replySubject(thread.messages.at(-1)?.subject || thread.subject));
   const [text, setText] = useState("");
+  const [images, setImages] = useState<ReplyImageInput[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!text.trim() || sending) return;
+    if ((!text.trim() && !images.length) || !subject.trim() || sending) return;
     setSending(true);
     setError("");
     setNotice("");
     try {
-      const result = await hubApi.reply(thread.id, crypto.randomUUID(), text);
+      const result = await hubApi.reply(thread.id, crypto.randomUUID(), subject, text, images);
       setText("");
+      setImages([]);
       setNotice(result.message.deliveryStatus === "sent" ? "回复已发送" : "邮件已提交，但发送状态需要确认");
       await onSent();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "发送失败，请稍后重试");
       await onSent().catch(() => undefined);
     } finally { setSending(false); }
+  };
+
+  const pasteImages = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    if (!files.length) return;
+    event.preventDefault();
+    setError("");
+    const allowed = files.filter((file) => ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type));
+    const currentBytes = images.reduce((total, image) => total + Math.floor(image.content.length * .75), 0);
+    const available = allowed.slice(0, Math.max(0, 8 - images.length));
+    const accepted: File[] = [];
+    let totalBytes = currentBytes;
+    for (const file of available) {
+      if (totalBytes + file.size > 4 * 1024 * 1024) break;
+      accepted.push(file);
+      totalBytes += file.size;
+    }
+    if (accepted.length !== files.length) setError("仅支持最多 8 张 JPG、PNG、GIF 或 WebP 图片，合计不超过 4 MiB");
+    try {
+      const next = await Promise.all(accepted.map(fileToReplyImage));
+      setImages((current) => [...current, ...next]);
+    } catch {
+      setError("图片读取失败，请重新粘贴");
+    }
   };
 
   return (
@@ -282,9 +330,13 @@ function Conversation({ thread, onBack, onSent }: { thread: ThreadDetail; onBack
       </div>
       <form className="reply-box" onSubmit={submit}>
         <div className="reply-meta"><span>发件人 <strong>{thread.mailboxAddress}</strong></span><span>收件人 {thread.participantEmail}</span></div>
-        <textarea value={text} onChange={(event) => setText(event.target.value)} maxLength={50_000} rows={5} disabled={thread.mailboxStatus !== "active" || sending} placeholder={thread.mailboxStatus === "active" ? "输入纯文本回复…" : "该邮箱已归档，不能回复"} aria-label="回复正文" />
+        <label className="reply-subject"><span>主题</span><input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} disabled={thread.mailboxStatus !== "active" || sending} aria-label="邮件主题" /></label>
+        <textarea value={text} onChange={(event) => setText(event.target.value)} onPaste={(event) => void pasteImages(event)} maxLength={50_000} rows={5} disabled={thread.mailboxStatus !== "active" || sending} placeholder={thread.mailboxStatus === "active" ? "输入回复，或按 Ctrl/⌘ + V 粘贴图片…" : "该邮箱已归档，不能回复"} aria-label="回复正文" />
+        {!!images.length && <div className="reply-images">{images.map((image, index) => (
+          <figure key={`${image.filename}-${index}`}><img src={`data:${image.type};base64,${image.content}`} alt={image.filename} /><button type="button" onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`移除 ${image.filename}`}>×</button><figcaption>{image.filename}</figcaption></figure>
+        ))}</div>}
         {(error || notice) && <p className={error ? "form-message error" : "form-message success"}>{error || notice}</p>}
-        <div className="reply-actions"><span>{text.length.toLocaleString()} / 50,000</span><button className="button primary" disabled={!text.trim() || sending || thread.mailboxStatus !== "active"}>{sending ? "发送中…" : "发送回复"}</button></div>
+        <div className="reply-actions"><span>{text.length.toLocaleString()} / 50,000{images.length ? ` · ${images.length} 张图片` : " · 可粘贴图片"}</span><button className="button primary" disabled={(!text.trim() && !images.length) || !subject.trim() || sending || thread.mailboxStatus !== "active"}>{sending ? "发送中…" : "发送回复"}</button></div>
       </form>
     </div>
   );

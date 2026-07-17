@@ -81,7 +81,9 @@ test("sends a threaded reply from the selected mailbox and is idempotent", async
       store,
       threadId: thread.id,
       clientRequestId: "02e2b2eb-b6d2-47c2-8aca-ff728a0c288f",
+      subject: "Re: Custom support subject",
       text: "Thanks — we are looking into it.",
+      images: [{ filename: "screenshot.png", type: "image/png", content: "aGVsbG8=", size: 5 }],
     };
     const first = await sendThreadReply(request);
     const duplicate = await sendThreadReply(request);
@@ -90,7 +92,11 @@ test("sends a threaded reply from the selected mailbox and is idempotent", async
     assert.equal(sent.length, 1);
     assert.deepEqual(sent[0]?.from, { email: "support@example.test", name: "Example Support" });
     assert.equal(sent[0]?.to, "jane@example.com");
+    assert.equal(sent[0]?.subject, "Re: Custom support subject");
+    assert.deepEqual(sent[0]?.attachments, [{ content: "aGVsbG8=", filename: "screenshot.png", type: "image/png", disposition: "attachment" }]);
     assert.deepEqual((sent[0]?.headers as Record<string, string>)["In-Reply-To"], "<incoming-1@example.com>");
-    assert.equal((await store.getThread(thread.id))?.messages.length, 2);
+    const detail = await store.getThread(thread.id);
+    assert.equal(detail?.messages.length, 2);
+    assert.deepEqual(detail?.messages.at(-1)?.attachments, [{ name: "screenshot.png", type: "image/png" }]);
   } finally { sqlite.close(); }
 });

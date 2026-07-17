@@ -107,8 +107,16 @@ button { color: inherit; }
 .reply-box { margin: 0 clamp(20px, 4vw, 60px) 22px; background: #181b22; border: 1px solid #353b47; border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
 .reply-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 11px 15px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 .reply-meta strong { color: var(--ink); }
+.reply-subject { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; padding: 10px 15px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.reply-subject input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 12px; font-weight: 650; }
 .reply-box textarea { width: 100%; border: 0; resize: vertical; min-height: 115px; padding: 15px; color: var(--ink); background: #13161c; outline: none; line-height: 1.6; }
 .reply-box textarea::placeholder { color: #9da7a2; }
+.reply-images { display: flex; gap: 10px; overflow-x: auto; padding: 0 15px 14px; background: #13161c; }
+.reply-images figure { position: relative; flex: 0 0 94px; margin: 0; }
+.reply-images img { display: block; width: 94px; height: 72px; object-fit: cover; border: 1px solid #3a414e; border-radius: 9px; background: #0c0e13; }
+.reply-images button { position: absolute; top: -6px; right: -6px; width: 21px; height: 21px; display: grid; place-items: center; padding: 0; border: 2px solid #13161c; border-radius: 50%; background: #343b48; color: white; cursor: pointer; line-height: 1; }
+.reply-images button:hover { background: var(--danger); }
+.reply-images figcaption { margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .reply-actions { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); }
 .reply-actions > span { color: var(--muted); font-size: 10px; }
 

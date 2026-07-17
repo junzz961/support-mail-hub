@@ -35,6 +35,12 @@ export interface MailboxInput {
   forwardTo: string;
 }
 
+export interface ReplyImageInput {
+  filename: string;
+  type: string;
+  content: string;
+}
+
 export const hubApi = {
   mailboxes: () => request<Mailbox[]>("/api/mailboxes"),
   createMailbox: (input: MailboxInput) => request<Mailbox>("/api/mailboxes", {
@@ -56,8 +62,8 @@ export const hubApi = {
     return request<ThreadPage>(`/api/threads?${query}`);
   },
   thread: (id: string) => request<ThreadDetail>(`/api/threads/${encodeURIComponent(id)}`),
-  reply: (id: string, clientRequestId: string, text: string) => request<ReplyResult>(
+  reply: (id: string, clientRequestId: string, subject: string, text: string, images: ReplyImageInput[]) => request<ReplyResult>(
     `/api/threads/${encodeURIComponent(id)}/replies`,
-    { method: "POST", body: JSON.stringify({ clientRequestId, text }) },
+    { method: "POST", body: JSON.stringify({ clientRequestId, subject, text, images }) },
   ),
 };

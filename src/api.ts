@@ -21,6 +21,31 @@ function isJson(request: Request): boolean {
   return request.headers.get("content-type")?.toLowerCase().startsWith("application/json") ?? false;
 }
 
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+const MAX_REPLY_IMAGES = 8;
+const MAX_REPLY_IMAGE_BYTES = 4 * 1024 * 1024;
+
+function replyImages(value: unknown): Array<{ filename: string; type: string; content: string; size: number }> | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_REPLY_IMAGES) return null;
+  let totalSize = 0;
+  const images: Array<{ filename: string; type: string; content: string; size: number }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+    const raw = item as Record<string, unknown>;
+    const filename = cleanSingleLine(raw.filename, 160);
+    const type = typeof raw.type === "string" ? raw.type.toLowerCase() : "";
+    const content = typeof raw.content === "string" ? raw.content : "";
+    if (!filename || !IMAGE_TYPES.has(type) || !content || content.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(content)) return null;
+    const padding = content.endsWith("==") ? 2 : content.endsWith("=") ? 1 : 0;
+    const size = content.length / 4 * 3 - padding;
+    totalSize += size;
+    if (!Number.isSafeInteger(size) || size <= 0 || totalSize > MAX_REPLY_IMAGE_BYTES) return null;
+    images.push({ filename, type, content, size });
+  }
+  return images;
+}
+
 function mailboxInput(value: unknown): {
   address: string;
   label: string;
@@ -116,8 +141,12 @@ app.post("/api/threads/:id/replies", async (c) => {
   if (!body || !validClientRequestId(body.clientRequestId)) {
     return c.json(failure("INVALID_REQUEST_ID", "发送请求标识无效"), 400);
   }
-  if (typeof body.text !== "string" || !body.text.trim() || body.text.length > 50_000) {
-    return c.json(failure("INVALID_REPLY", "回复内容应为 1–50,000 个字符"), 400);
+  const subject = cleanSingleLine(body.subject, 200);
+  const images = replyImages(body.images);
+  if (!subject) return c.json(failure("INVALID_SUBJECT", "邮件主题应为 1–200 个字符"), 400);
+  if (images === null) return c.json(failure("INVALID_IMAGES", "最多添加 8 张 JPG、PNG、GIF 或 WebP 图片，合计不超过 4 MiB"), 400);
+  if (typeof body.text !== "string" || body.text.length > 50_000 || (!body.text.trim() && !images.length)) {
+    return c.json(failure("INVALID_REPLY", "请输入回复内容或添加图片，正文不能超过 50,000 个字符"), 400);
   }
   try {
     const result = await sendThreadReply({
@@ -125,7 +154,9 @@ app.post("/api/threads/:id/replies", async (c) => {
       store: new MailStore(c.env.MAIL_DB),
       threadId: c.req.param("id"),
       clientRequestId: body.clientRequestId,
+      subject,
       text: body.text,
+      images,
     });
     return c.json(success(result));
   } catch (error) {

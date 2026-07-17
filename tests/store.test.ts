@@ -85,6 +85,8 @@ test("creates idempotent pending replies and purges old records", async () => {
       recipient: "jane@example.com",
       subject: "Re: Need help",
       text: "We can help.",
+      attachments: [],
+      rawSize: 0,
       references: ["<inbound-1@example.com>"],
       now: Date.parse("2026-07-17T06:00:00Z"),
     };

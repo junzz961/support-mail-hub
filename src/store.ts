@@ -305,6 +305,8 @@ export class MailStore {
     recipient: string;
     subject: string;
     text: string;
+    attachments: Array<{ name: string; type: string }>;
+    rawSize: number;
     references: string[];
     now: number;
   }): Promise<{ row: MessageRow; duplicate: boolean }> {
@@ -318,7 +320,7 @@ export class MailStore {
            id, threadId, mailboxId, direction, dedupeKey, inReplyTo, referencesJson,
            fromAddress, fromName, replyToAddress, toAddress, subject, bodyText,
            bodyTruncated, attachmentsJson, rawSize, deliveryStatus, clientRequestId, createdAt
-         ) VALUES (?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '[]', 0, 'pending', ?, ?)`,
+         ) VALUES (?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'pending', ?, ?)`,
       ).bind(
         id,
         input.context.thread.id,
@@ -332,6 +334,8 @@ export class MailStore {
         input.recipient,
         input.subject,
         input.text,
+        JSON.stringify(input.attachments),
+        input.rawSize,
         input.clientRequestId,
         input.now,
       ),
