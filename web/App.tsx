@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type {
   DeliveryStatus,
   Mailbox,
@@ -65,6 +65,10 @@ export function App() {
   const [state, setState] = useState<LoadState>("loading");
   const [threadLoading, setThreadLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [threadListWidth, setThreadListWidth] = useState(() => {
+    const saved = Number(localStorage.getItem("thread-list-width"));
+    return Number.isFinite(saved) && saved >= 300 && saved <= 640 ? saved : 390;
+  });
 
   const activeMailboxes = useMemo(() => mailboxes.filter((mailbox) => mailbox.status === "active"), [mailboxes]);
 
@@ -128,6 +132,29 @@ export function App() {
     } finally { setLoadingMore(false); }
   };
 
+  const beginResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= 800) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = threadListWidth;
+    document.body.classList.add("is-resizing");
+
+    const move = (moveEvent: PointerEvent) => {
+      setThreadListWidth(Math.min(640, Math.max(300, startWidth + moveEvent.clientX - startX)));
+    };
+    const finish = () => {
+      document.body.classList.remove("is-resizing");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish, { once: true });
+  };
+
+  useEffect(() => {
+    localStorage.setItem("thread-list-width", String(Math.round(threadListWidth)));
+  }, [threadListWidth]);
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -144,7 +171,7 @@ export function App() {
       {screen === "settings" ? (
         <Settings mailboxes={mailboxes} onChanged={loadMailboxes} onBack={() => setScreen("mail")} />
       ) : (
-        <div className={`workspace ${selectedId ? "thread-open" : ""}`}>
+        <div className={`workspace ${selectedId ? "thread-open" : ""}`} style={{ "--thread-list-width": `${threadListWidth}px` } as CSSProperties}>
           <aside className="mailbox-rail">
             <div className="rail-label">收件箱</div>
             <button className={!mailboxId ? "active" : ""} onClick={() => chooseMailbox("")}>
@@ -184,6 +211,10 @@ export function App() {
               </div>
             )}
           </section>
+
+          <div className="column-resizer" role="separator" aria-label="调整会话列表宽度" aria-orientation="vertical" onPointerDown={beginResize} onDoubleClick={() => setThreadListWidth(390)}>
+            <span />
+          </div>
 
           <main className="conversation-panel">
             {threadLoading ? <div className="conversation-placeholder"><span className="spinner" />载入会话…</div>
