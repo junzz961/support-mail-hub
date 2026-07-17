@@ -93,7 +93,11 @@ test("sends a threaded reply from the selected mailbox and is idempotent", async
     assert.deepEqual(sent[0]?.from, { email: "support@example.test", name: "Example Support" });
     assert.equal(sent[0]?.to, "jane@example.com");
     assert.equal(sent[0]?.subject, "Re: Custom support subject");
-    assert.deepEqual(sent[0]?.attachments, [{ content: "aGVsbG8=", filename: "screenshot.png", type: "image/png", disposition: "attachment" }]);
+    const attachments = sent[0]?.attachments as Array<Record<string, unknown>>;
+    assert.equal(attachments[0]?.filename, "screenshot.png");
+    assert.equal(attachments[0]?.type, "image/png");
+    assert.equal(attachments[0]?.disposition, "attachment");
+    assert.deepEqual(Array.from(attachments[0]?.content as Uint8Array), [104, 101, 108, 108, 111]);
     assert.deepEqual((sent[0]?.headers as Record<string, string>)["In-Reply-To"], "<incoming-1@example.com>");
     const detail = await store.getThread(thread.id);
     assert.equal(detail?.messages.length, 2);

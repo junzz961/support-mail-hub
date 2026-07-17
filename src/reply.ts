@@ -30,6 +30,13 @@ function emailErrorCode(error: unknown): string {
   return typeof code === "string" && code ? code : "EMAIL_SEND_FAILED";
 }
 
+function decodeBase64(content: string): Uint8Array {
+  const binary = atob(content);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
 async function duplicateResult(store: MailStore, row: MessageRow): Promise<ReplyResult> {
   return store.replyResult(row, true);
 }
@@ -86,7 +93,7 @@ export async function sendThreadReply(input: {
         html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.65;color:#17201d;white-space:normal">${escapeHtml(text).replaceAll("\n", "<br>")}</div>`,
       } : {}),
       attachments: input.images.map((image) => ({
-        content: image.content,
+        content: decodeBase64(image.content),
         filename: image.filename,
         type: image.type,
         disposition: "attachment" as const,
